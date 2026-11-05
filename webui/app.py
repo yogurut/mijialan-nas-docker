@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MijiaLAN NAS web UI - stdlib only, no pip dependencies.
 
-Serves http://<NAS-IP>:8080 (host network) so the user never has to read a
+Serves http://<NAS-IP>:20080 (host network) so the user never has to read a
 QR code out of `docker logs`:
 
 * Login: POST /api/login starts `mijia-rust login --region cn` in the
@@ -11,7 +11,7 @@ QR code out of `docker logs`:
   bridge QR art, renders it the same way for the iPhone Home app.
 * Devices / Discover / bridge restart / log tail.
 
-Security: LAN only. Do NOT port-forward 8080 to the internet. There is no
+Security: LAN only. Do NOT port-forward 20080 to the internet. There is no
 login on this page by design - it runs on the home LAN behind the NAS.
 """
 import json
@@ -28,7 +28,7 @@ from urllib.parse import urlparse, parse_qs
 DATA = Path(os.environ.get("MIJIALAN_DATA", "/data"))
 BRIDGE_LOG = DATA / "bridge.log"
 BRIDGE_PID = DATA / "bridge.pid"
-WEB_PORT = int(os.environ.get("MIJIALAN_WEB_PORT", "8080"))
+WEB_PORT = int(os.environ.get("MIJIALAN_WEB_PORT", "20080"))
 BIN = os.environ.get("MIJIA_BIN", "/usr/local/bin/mijia-rust")
 BRIDGECTL = os.environ.get("BRIDGECTL", "/usr/local/bin/bridgectl")
 HERE = Path(__file__).resolve().parent

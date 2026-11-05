@@ -3,7 +3,7 @@
 # run the HomeKit bridge in the background and the web UI in the foreground.
 #
 #   Bridge:  mijia-rust bridge  (log: /data/bridge.log, pid: /data/bridge.pid)
-#   Web UI:  python3 /app/webui/app.py  on http://<NAS-IP>:8080
+#   Web UI:  python3 /app/webui/app.py  on http://<NAS-IP>:20080
 #            - scan the Mi Home login QR in the browser, no terminal needed
 #            - shows the HomeKit pairing code + QR, devices, logs
 #
@@ -26,7 +26,7 @@ export XDG_CONFIG_HOME=/data/config
 export XDG_DATA_HOME=/data/local/share
 export XDG_RUNTIME_DIR=/tmp/runtime-mijia
 export MIJIALAN_DATA=/data
-export MIJIALAN_WEB_PORT="${MIJIALAN_WEB_PORT:-8080}"
+export MIJIALAN_WEB_PORT="${MIJIALAN_WEB_PORT:-20080}"
 
 # 1) Session D-Bus (Secret Service lives on the session bus).
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then

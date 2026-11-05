@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MijiaLAN · 米家 HomeKit 桥</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         max-width: 760px; margin: 0 auto; padding: 16px; line-height: 1.6; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  .sub { color: gray; font-size: 14px; margin-bottom: 16px; }
+  section { border: 1px solid #8884; border-radius: 12px; padding: 16px; margin: 12px 0; }
+  h2 { font-size: 17px; margin: 0 0 8px; }
+  button { padding: 9px 16px; border-radius: 8px; border: 1px solid #8888;
+           background: #2f7cf6; color: #fff; font-size: 15px; cursor: pointer; }
+  button.secondary { background: transparent; color: inherit; }
+  button:disabled { opacity: .5; cursor: wait; }
+  select, input { padding: 8px; border-radius: 8px; border: 1px solid #8888; font-size: 15px; }
+  .qr { background: #fff; display: inline-block; padding: 8px; border-radius: 8px; margin: 8px 0; }
+  .qr svg { display: block; max-width: 100%; height: auto; }
+  .code { font-size: 26px; letter-spacing: 4px; font-weight: 700; }
+  pre { white-space: pre-wrap; word-break: break-all; background: #8882;
+        padding: 10px; border-radius: 8px; font-size: 12px; max-height: 260px; overflow: auto; }
+  .ok { color: #1a7f37; } .bad { color: #c0392b; } .muted { color: gray; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { border-bottom: 1px solid #8883; padding: 6px 4px; text-align: left; }
+</style>
+</head>
+<body>
+<h1>MijiaLAN · 米家 HomeKit 桥</h1>
+<p class="sub">跑在绿联 DX4600 上 · 仅限局域网访问，不要把 8080 端口映射到公网</p>
+
+<section>
+  <h2>1 · 扫码登录米家（导入设备）</h2>
+  <p>点开始后，下面会出现二维码，用<strong>米家 App 扫码并确认</strong>，不用在终端里看字符画。</p>
+  <p>地区
+    <select id="region">
+      <option value="cn" selected>中国大陆 cn</option>
+      <option value="de">德国 de</option><option value="us">美国 us</option>
+      <option value="sg">新加坡 sg</option><option value="ru">俄罗斯 ru</option>
+      <option value="i2">印度 i2</option>
+    </select>
+    <button id="loginBtn" onclick="startLogin()">开始扫码登录</button>
+  </p>
+  <div id="loginQr"></div>
+  <p id="loginMsg" class="muted">还没开始登录。登录时会先暂停桥接，导入完成自动恢复。</p>
+  <pre id="loginOut" hidden></pre>
+</section>
+
+<section>
+  <h2>2 · HomeKit 配对</h2>
+  <p id="bridgeState" class="muted">桥接状态读取中…</p>
+  <div id="pairQr"></div>
+  <p>配对码：<span class="code" id="pairCode">—</span></p>
+  <p class="muted">iPhone「家庭」→ + → 添加配件 → 扫上面二维码，或手动输配对码。
+     提示“未认证配件”是正常的，点确认继续。</p>
+  <button class="secondary" onclick="bridgeOp('restart')">重启桥接</button>
+  <button class="secondary" onclick="refresh()">刷新状态</button>
+</section>
+
+<section>
+  <h2>3 · 设备</h2>
+  <button class="secondary" onclick="loadDevices()">刷新设备</button>
+  <button class="secondary" onclick="discover()">广播发现新设备</button>
+  <div id="devices" class="muted">还没加载。</div>
+</section>
+
+<section>
+  <h2>桥接日志</h2>
+  <pre id="log">读取中…</pre>
+</section>
+
+<script>
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  return r.json();
+}
+let loginTimer = null;
+async function startLogin() {
+  const region = document.getElementById('region').value;
+  document.getElementById('loginBtn').disabled = true;
+  document.getElementById('loginMsg').textContent = '正在等待扫码…请用米家 App 扫下面的二维码。';
+  await api('/api/login', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({region})});
+  clearInterval(loginTimer);
+  loginTimer = setInterval(pollLogin, 1500);
+  pollLogin();
+}
+async function pollLogin() {
+  const s = await api('/api/login');
+  document.getElementById('loginQr').innerHTML = s.has_qr ? '<div class="qr">' + s.qr_svg + '</div>' : '';
+  const out = document.getElementById('loginOut');
+  if (s.output_tail) { out.hidden = false; out.textContent = s.output_tail; }
+  if (s.done) {
+    clearInterval(loginTimer);
+    document.getElementById('loginBtn').disabled = false;
+    document.getElementById('loginMsg').textContent =
+      s.imported != null ? ('导入完成：' + s.imported + ' 台设备。') : '登录已结束（见上方输出），没有导入到设备请重试。';
+    loadDevices(); refresh();
+  }
+}
+async function refresh() {
+  const s = await api('/api/status');
+  const b = s.bridge;
+  document.getElementById('bridgeState').innerHTML =
+    '桥接：' + (b.running ? '<span class="ok">运行中</span>' : '<span class="bad">未运行</span>');
+  document.getElementById('pairCode').textContent = b.pairing_code || '—';
+  document.getElementById('pairQr').innerHTML = b.has_pairing_qr ? '<div class="qr">' + b.pairing_qr_svg + '</div>' : '';
+  document.getElementById('log').textContent = b.log_tail || '(暂无日志)';
+  if (s.login.has_qr) {
+    document.getElementById('loginQr').innerHTML = '<div class="qr">' + s.login.qr_svg + '</div>';
+  }
+}
+async function bridgeOp(op) {
+  await api('/api/bridge/' + op, {method: 'POST'});
+  setTimeout(refresh, 1500);
+}
+async function loadDevices() {
+  const d = await api('/api/devices');
+  const el = document.getElementById('devices');
+  if (d.error) { el.textContent = '读取失败：' + d.error; return; }
+  const list = d.devices || [];
+  if (!list.length) { el.textContent = '暂无设备，先做第 1 步扫码导入。'; return; }
+  el.innerHTML = '<table><tr><th>名称</th><th>型号</th><th>IP</th><th>状态</th></tr>' +
+    list.map(x => '<tr><td>' + (x.name || x.did) + '</td><td>' + (x.model || '') + '</td><td>' +
+      (x.host || '') + '</td><td>' + (x.online ? '在线' : '离线') + '</td></tr>').join('') + '</table>';
+}
+async function discover() {
+  const el = document.getElementById('devices');
+  el.textContent = '正在广播发现（约 3 秒）…';
+  const d = await api('/api/discover');
+  el.innerHTML = '<pre>' + JSON.stringify(d, null, 2) + '</pre><p class="muted">发现的设备如需加入，先在米家 App 里确认它已联网，再用扫码导入或按 IP 添加。</p>';
+}
+refresh(); loadDevices(); setInterval(refresh, 10000);
+</script>
+</body>
+</html>

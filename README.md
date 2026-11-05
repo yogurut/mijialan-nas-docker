@@ -12,8 +12,26 @@
 >   分支自带的 `scripts/docker/Dockerfile` 也只是**构建容器**，不是运行容器。
 >   本包就是把“构建 + 运行 + 凭据服务”拼成一个能用的产品。
 > - 容器里**没有桌面界面**：NAS 没有 X11/Wayland，GPUI 桌面版不在镜像里。
->   日常控制走 iPhone「家庭」/ Siri，设备管理走 CLI（`list` / `add` /
->   `login` / `discover`）。
+>   取而代之的是一个**网页界面**（见下）：登录扫码、HomeKit 配对码、
+>   设备列表都在浏览器里完成，不用在终端里看字符画二维码。
+>   日常控制走 iPhone「家庭」/ Siri。
+
+## 网页界面（登录 / 配对都在这里）
+
+容器启动后，浏览器打开 **http://&lt;NAS 局域网 IP&gt;:8080**，页面分三块：
+
+1. **扫码登录米家**：点“开始扫码登录”，页面上出现一个可扫的二维码，
+   用米家 App 扫码并确认，设备就导入了。登录时会先暂停桥接，导入
+   完成自动恢复。终端版 `./scripts/login.sh` 只是备用。
+2. **HomeKit 配对**：页面显示桥的配对码和配对二维码，iPhone「家庭」
+   里扫码或手动输码即可。
+3. **设备 / 日志**：已导入的设备列表、广播发现、重启桥接、桥接日志。
+
+页面是 Python 标准库写的（`webui/app.py`，无第三方依赖），
+二维码是把 CLI 打印的 Dense1x2 字符画逐像素还原成 SVG 的，
+已用测试桩验证过：还原出的 430 个黑格与原始二维码矩阵完全一致。
+
+**只限局域网**：页面没有账号密码，不要把 8080 端口映射到公网。
 > - 上游 Rust 版是 0.1.0 前期版本。Linux 下干净容器安装、CLI 运行和
 >   33 项核心 / HomeKit 测试已通过，但 **Linux 上 iPhone 实机配对尚未经
 >   上游验收**，本包在 DX4600 上的完整配对流程也未经实机验证——按下面
@@ -73,72 +91,53 @@ vi .env   # 把 MIJIALAN_KEYRING_PASSWORD 改成一个长随机密码，记进�
 改掉它 = 主密钥解不开 = 所有设备要重新导入、HomeKit 要重新配对。
 `.env` 不要发给任何人、不要提交到任何仓库。
 
-### 3. 构建镜像（DX4600 上第一次约 10–20 分钟）
+### 3. 拉取镜像（不用在 NAS 上构建）
 
 ```bash
-docker compose build
+docker compose pull
 ```
 
-构建时会从 GitHub 克隆 `MijiaLAN-rs` 固定提交并编译 CLI。
-N5105 只有 4 核，编译期间 NAS 会比较忙，耐心等它跑完；
-`docker compose build` 失败先看是不是 GitHub 访问超时，重试一次。
+镜像由 GitHub Actions 编好、发布在 `ghcr.io/yogurut/mijialan-nas:latest`
+（公开，不用登录）。想固定版本就把 compose 里的 `image:` 改成
+`ghcr.io/yogurut/mijialan-nas:354fabc`。
 
-### 4. 首次导入设备（二选一）
-
-**方式 A：扫码导入（推荐）**
-
-```bash
-./scripts/login.sh
-# 或手动：docker compose run --rm -it mijialan login --region cn
-```
-
-终端会打印一个二维码字符画，用**米家 App 扫码并确认**，
-导入完成后会显示“导入 N 台设备”。地区默认 `cn`，
-账号在其他区就改 `.env` 里的 `MIJIALAN_REGION`（cn / de / us / sg / ru / i2）。
-
-**方式 B：已知 IP + token，逐台手动加**
-
-```bash
-./scripts/add-device.sh 192.168.31.20 "书桌台灯"
-# token 在提示出现时输入，不回显，也不会进 shell 历史
-```
-
-导入完先核对一下：
-
-```bash
-docker compose run --rm mijialan list
-docker compose run --rm mijialan discover   # 3 秒广播发现局域网设备
-```
-
-### 5. 启动桥接
+### 4. 启动（桥接 + 网页界面一起跑）
 
 ```bash
 docker compose up -d
-docker compose logs -f mijialan
 ```
 
-日志里会出现类似这样的内容（首次启动）：
+### 5. 在网页上扫码导入设备（推荐）
 
-```
-HomeKit 桥已启动，端口 <随机持久化端口>
-配对码：123-45-678
-<二维码字符画>
-```
+浏览器打开 **http://&lt;NAS 局域网 IP&gt;:8080**：
 
-端口是首次启动随机选定、之后持久化在加密凭据里的，
-重启容器不会变，所以不需要在 compose 里映射端口——
-容器用的是 `network_mode: host`，直接用 NAS 的局域网地址。
+1. 在“扫码登录米家”里点**开始扫码登录**，页面出现二维码，
+   用**米家 App 扫码并确认**，导入完成后页面显示“导入 N 台设备”。
+   地区默认 `cn`，账号在其他区就改 `.env` 里的 `MIJIALAN_REGION`
+   （cn / de / us / sg / ru / i2）。
+2. 已知 IP + token 的设备也可以逐台手动加（备用）：
+   ```bash
+   ./scripts/add-device.sh 192.168.31.20 "书桌台灯"
+   # token 在提示出现时输入，不回显，也不会进 shell 历史
+   ```
+3. 在页面“设备”一栏核对导入结果；也可以点“广播发现新设备”
+   （3 秒广播发现局域网设备）。
 
 ### 6. iPhone「家庭」里添加
 
+在同一个网页的“HomeKit 配对”一栏里看配对码和配对二维码：
+
 1. iPhone 打开「家庭」→ 右上角 `+` → **添加配件**。
-2. 扫日志里的二维码，或选“没有二维码”，手动输入配对码。
+2. 扫网页上的二维码，或选“没有二维码”，手动输入配对码。
 3. 提示**未认证配件**是正常的（社区项目，没有 HomeKit / MFi 认证），点确认继续。
 4. 按提示把桥接的设备分到房间。已经原生支持 HomeKit 的设备
    建议不要重复桥接，会出现两个同名配件。
 
 配对成功后，桥的配对信息存在 `credentials.enc` 里，
 容器重建、NAS 重启后不需要重新配对（只要 `./data` 还在）。
+桥的 TCP 端口是首次启动随机选定、之后持久化在加密凭据里的，
+重启容器不会变；容器用 `network_mode: host`，直接用 NAS 的局域网地址，
+不需要在 compose 里映射端口。
 
 ## 日常使用
 
@@ -188,10 +187,12 @@ docker compose run --rm mijialan set <did> 2.1 true
 
 | 文件 | 用途 |
 |---|---|
-| `Dockerfile` | 多阶段构建：builder 编 CLI，runtime 只留运行依赖 + 钥匙串 |
-| `entrypoint.sh` | 启动 D-Bus 会话、解锁 gnome-keyring、再 exec CLI |
-| `docker-compose.yml` | 单容器编排：host 网络、挂载 `./data`、默认跑 `bridge` |
+| `Dockerfile` | 多阶段构建：builder 编 CLI，runtime 只留运行依赖 + 钥匙串 + Python |
+| `entrypoint.sh` | 启动 D-Bus 会话、解锁 gnome-keyring、后台起桥接、前台跑网页界面 |
+| `webui/app.py` + `webui/index.html` | 网页界面（标准库 Python，无第三方依赖）：登录二维码、配对码、设备、日志 |
+| `scripts/bridgectl.sh` | 桥接启停管理（网页界面调用），日志写 `/data/bridge.log` |
+| `docker-compose.yml` | 单容器编排：host 网络、挂载 `./data`、拉 ghcr 镜像 |
 | `.env.example` | 复制成 `.env` 后填钥匙串密码和地区 |
-| `scripts/login.sh` | 首次扫码导入 |
+| `scripts/login.sh` | 首次扫码导入（终端备用，首选网页） |
 | `scripts/add-device.sh` | 手动按 IP + token 加设备 |
 | `scripts/status.sh` | 状态 + 日志 + 设备清单 |

@@ -4,7 +4,7 @@
 #   cp .env.example .env   # and edit the keyring password inside it
 #   docker compose pull
 #   docker compose up -d
-#   open http://<NAS-IP>:8080  and scan the Mi Home login QR in the browser
+#   open http://<NAS-IP>:20080  and scan the Mi Home login QR in the browser
 #
 # No `build:` block here on purpose: the image is built by GitHub Actions
 # and published to ghcr.io. Pull it, do not build it on the NAS.
@@ -14,7 +14,7 @@
 # network_mode: host is NOT optional. miIO discovery is UDP 54321
 # broadcast and HomeKit is mDNS + a persisted TCP port; both break behind
 # Docker's bridge NAT. With host networking the web UI is simply on the
-# NAS's LAN address at port 8080 - there is nothing to map in `ports:`.
+# NAS's LAN address at port 20080 - there is nothing to map in `ports:`.
 services:
   mijialan:
     image: ghcr.io/yogurut/mijialan-nas:latest
@@ -27,7 +27,7 @@ services:
       # all devices + re-pair HomeKit. Never commit .env anywhere.
       MIJIALAN_KEYRING_PASSWORD: ${MIJIALAN_KEYRING_PASSWORD:?set it in .env}
       MIJIALAN_REGION: ${MIJIALAN_REGION:-cn}
-      MIJIALAN_WEB_PORT: ${MIJIALAN_WEB_PORT:-8080}
+      MIJIALAN_WEB_PORT: ${MIJIALAN_WEB_PORT:-20080}
       TZ: Asia/Shanghai
     volumes:
       # Single persistent volume. Everything the bridge needs to survive
@@ -35,6 +35,6 @@ services:
       # HomeKit identity/pairings (inside credentials.enc) and the
       # gnome-keyring files. Back this folder up.
       - ./data:/data
-    # Long-running: HomeKit bridge (background) + web UI on :8080 (foreground).
+    # Long-running: HomeKit bridge (background) + web UI on :20080 (foreground).
     # One-offs (list/discover/...) override this via `docker compose run --rm ...`.
     command: bridge

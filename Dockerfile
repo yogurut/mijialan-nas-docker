@@ -51,13 +51,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       dbus dbus-bin \
       gnome-keyring libsecret-1-0 libsecret-tools \
       iproute2 iputils-ping procps \
+      python3 \
     && rm -rf /var/lib/apt/lists/* \
- && mkdir -p /data/config /data/local/share
+ && mkdir -p /data/config /data/local/share /app/webui
 
 COPY --from=builder /usr/local/bin/mijia-rust /usr/local/bin/mijia-rust
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
- && mijia-rust --help
+COPY scripts/bridgectl.sh /usr/local/bin/bridgectl
+COPY webui/ /app/webui/
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/bridgectl \
+ && mijia-rust --help \
+ && python3 -m py_compile /app/webui/app.py
 
 # Data dir. ProjectDirs on Linux resolves config_dir() from XDG_CONFIG_HOME,
 # so /data/config is where "MijiaLAN Rust/devices.json" ends up.

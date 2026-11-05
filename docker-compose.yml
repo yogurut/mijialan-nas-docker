@@ -1,0 +1,37 @@
+# MijiaLAN-rs on UGREEN DX4600 (UGOS Pro) - single-container product
+# Place this whole folder on the NAS, e.g. /volume1/docker/mijialan
+# (adjust the path to your own storage pool), then:
+#   cp .env.example .env   # and edit the keyring password inside it
+#   docker compose build
+#   docker compose run --rm -it mijialan login --region cn   # first run only
+#   docker compose up -d
+#
+# network_mode: host is NOT optional. miIO discovery is UDP 54321
+# broadcast and HomeKit is mDNS + a persisted TCP port; both break behind
+# Docker's bridge NAT. With host networking there is nothing to map in
+# `ports:` - the bridge announces itself on the NAS's LAN address.
+services:
+  mijialan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mijialan-nas:0.1.0-rs
+    container_name: mijialan
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Keyring unlock password. MUST be identical on every start, and
+      # must match the one used at first login. Losing it = re-import
+      # all devices + re-pair HomeKit. Never commit .env anywhere.
+      MIJIALAN_KEYRING_PASSWORD: ${MIJIALAN_KEYRING_PASSWORD:?set it in .env}
+      MIJIALAN_REGION: ${MIJIALAN_REGION:-cn}
+      TZ: Asia/Shanghai
+    volumes:
+      # Single persistent volume. Everything the bridge needs to survive
+      # a container rebuild lives here: devices.json, credentials.enc,
+      # HomeKit identity/pairings (inside credentials.enc) and the
+      # gnome-keyring files. Back this folder up.
+      - ./data:/data
+    # Long-running HomeKit bridge. One-offs (login/add/list/discover)
+    # override this via `docker compose run --rm ...`.
+    command: bridge
